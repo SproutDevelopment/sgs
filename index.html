@@ -3,26 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <title>三國殺共用牌堆模擬器</title>
-    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Firebase SDK v9 (Compat) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-6">
 
     <div class="max-w-4xl mx-auto space-y-6">
-        <!-- 標題與狀態 -->
         <header class="text-center bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
             <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺共用牌堆系統</h1>
             <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">載入中...</span></p>
             <div id="error-msg" class="text-red-400 text-sm mt-2 font-bold"></div>
             <div class="mt-4 flex justify-center gap-4">
-                <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (161張)</button>
+                <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (含木牛 161張)</button>
             </div>
         </header>
 
-        <!-- 摸牌操作面板 -->
         <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col items-center">
                 <h2 class="text-lg font-semibold mb-3 text-amber-300">牌堆頂操作</h2>
@@ -43,20 +39,16 @@
             </div>
         </section>
 
-        <!-- 抽牌結果顯示區 -->
         <section id="result-container" class="bg-slate-800 p-6 rounded-xl border border-slate-700 text-center hidden">
             <h3 class="text-slate-400 text-sm mb-1">您剛剛抽到的卡牌：</h3>
             <div id="drawn-card-display" class="inline-block p-4 rounded-lg bg-slate-900 border-2 border-amber-500 shadow-xl my-2"></div>
         </section>
 
-        <!-- 彈窗：檢視與調整順序 -->
         <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50 p-4">
             <div class="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-xl p-6 max-h-[90vh] flex flex-col">
                 <h3 id="modal-title" class="text-xl font-bold text-amber-400 mb-4">調整牌序</h3>
                 <p class="text-xs text-slate-400 mb-2">提示：您可以點擊上下按鈕改變順序，最上方代表牌堆頂端。</p>
-                
                 <div id="modal-card-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2"></div>
-
                 <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-700">
                     <button onclick="closeModal()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">取消</button>
                     <button onclick="saveCardOrder()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition">確認儲存新順序</button>
@@ -65,7 +57,6 @@
         </div>
     </div>
 
-    <!-- Firebase 邏輯與遊戲主程式 -->
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDO_8ZwioSIb_pWFLP4VKNcAxjhrhNVU3c",
@@ -87,172 +78,188 @@
         const db = firebase.database();
         const deckRef = db.ref('sanguosha/deck');
 
-        // 標準 161 張牌資料庫定義
+        // 準確點算共 161 張牌的標準+軍爭牌庫（包含木牛流馬）
         const masterDeckData = [
-            // 黑桃 (39張)
-            {suit: "黑桃", num: "A", name: "決鬥", type: "錦囊牌"},
-            {suit: "黑桃", num: "A", name: "閃電", type: "錦囊牌（延時）"},
-            {suit: "黑桃", num: "A", name: "古錠刀", type: "裝備牌（武器）"},
-            {suit: "黑桃", num: "2", name: "雌雄雙股劍", type: "裝備牌（武器）"},
-            {suit: "黑桃", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
-            {suit: "黑桃", num: "2", name: "藤甲", type: "裝備牌（防具）"},
-            {suit: "黑桃", num: "2", name: "寒冰劍", type: "裝備牌（武器）"},
-            {suit: "黑桃", num: "3", name: "酒", type: "基本牌"},
-            {suit: "黑桃", num: "3", name: "過河拆橋", type: "錦囊牌"},
-            {suit: "黑桃", num: "3", name: "順手牽羊", type: "錦囊牌"},
-            {suit: "黑桃", num: "4", name: "雷殺", type: "基本牌"},
-            {suit: "黑桃", num: "4", name: "過河拆橋", type: "錦囊牌"},
-            {suit: "黑桃", num: "4", name: "順手牽羊", type: "錦囊牌"},
-            {suit: "黑桃", num: "5", name: "雷殺", type: "基本牌"},
-            {suit: "黑桃", num: "5", name: "青龍偃月刀", type: "裝備牌（武器）"},
-            {suit: "黑桃", num: "5", name: "絕影 (+1)", type: "裝備牌（坐騎）"},
-            {suit: "黑桃", num: "6", name: "雷殺", type: "基本牌"},
-            {suit: "黑桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
-            {suit: "黑桃", num: "6", name: "青釭劍", type: "裝備牌（武器）"},
+            // --- 基本牌 (85張) ---
+            // 殺 (44張)
             {suit: "黑桃", num: "7", name: "殺（普）", type: "基本牌"},
-            {suit: "黑桃", num: "7", name: "雷殺", type: "基本牌"},
-            {suit: "黑桃", num: "7", name: "南蠻入侵", type: "錦囊牌"},
             {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
             {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
-            {suit: "黑桃", num: "8", name: "雷殺", type: "基本牌"},
             {suit: "黑桃", num: "9", name: "殺（普）", type: "基本牌"},
             {suit: "黑桃", num: "9", name: "殺（普）", type: "基本牌"},
-            {suit: "黑桃", num: "9", name: "酒", type: "基本牌"},
             {suit: "黑桃", num: "10", name: "殺（普）", type: "基本牌"},
             {suit: "黑桃", num: "10", name: "殺（普）", type: "基本牌"},
-            {suit: "黑桃", num: "10", name: "兵糧寸斷", type: "錦囊牌（延時）"},
-            {suit: "黑桃", num: "J", name: "順手牽羊", type: "錦囊牌"},
-            {suit: "黑桃", num: "J", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "黑桃", num: "J", name: "鐵索連環", type: "錦囊牌"},
-            {suit: "黑桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
-            {suit: "黑桃", num: "Q", name: "鐵索連環", type: "錦囊牌"},
-            {suit: "黑桃", num: "Q", name: "丈八蛇矛", type: "裝備牌（武器）"},
-            {suit: "黑桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "黑桃", num: "K", name: "南蠻入侵", type: "錦囊牌"},
-            {suit: "黑桃", num: "K", name: "大宛 (-1)", type: "裝備牌（坐騎）"},
-
-            // 紅桃 (39張)
-            {suit: "紅桃", num: "A", name: "萬箭齊發", type: "錦囊牌"},
-            {suit: "紅桃", num: "A", name: "桃園結義", type: "錦囊牌"},
-            {suit: "紅桃", num: "A", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
-            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
-            {suit: "紅桃", num: "2", name: "火攻", type: "錦囊牌"},
-            {suit: "紅桃", num: "3", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "3", name: "五谷豐登", type: "錦囊牌"},
-            {suit: "紅桃", num: "3", name: "火攻", type: "錦囊牌"},
-            {suit: "紅桃", num: "4", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "4", name: "五谷豐登", type: "錦囊牌"},
-            {suit: "紅桃", num: "4", name: "火殺", type: "基本牌"},
-            {suit: "紅桃", num: "5", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "5", name: "赤兔 (-1)", type: "裝備牌（坐騎）"},
-            {suit: "紅桃", num: "5", name: "麒麟弓", type: "裝備牌（武器）"},
-            {suit: "紅桃", num: "6", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
-            {suit: "紅桃", num: "7", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "7", name: "無中生有", type: "錦囊牌"},
-            {suit: "紅桃", num: "7", name: "火殺", type: "基本牌"},
-            {suit: "紅桃", num: "8", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "8", name: "無中生有", type: "錦囊牌"},
-            {suit: "紅桃", num: "8", name: "閃", type: "基本牌"},
-            {suit: "紅桃", num: "9", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "9", name: "無中生有", type: "錦囊牌"},
-            {suit: "紅桃", num: "9", name: "閃", type: "基本牌"},
             {suit: "紅桃", num: "10", name: "殺（普）", type: "基本牌"},
             {suit: "紅桃", num: "10", name: "殺（普）", type: "基本牌"},
-            {suit: "紅桃", num: "10", name: "火殺", type: "基本牌"},
             {suit: "紅桃", num: "J", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "3", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "4", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "5", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "6", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "7", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "J", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "Q", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "K", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "殺（普）", type: "基本牌"},
+            // 雷殺 (9張)
+            {suit: "黑桃", num: "4", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "5", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "6", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "7", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "8", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "5", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "6", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "7", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "雷殺", type: "基本牌"},
+            // 火殺 (5張)
+            {suit: "紅桃", num: "4", name: "火殺", type: "基本牌"},
+            {suit: "紅桃", num: "7", name: "火殺", type: "基本牌"},
+            {suit: "紅桃", num: "10", name: "火殺", type: "基本牌"},
+            {suit: "方塊", num: "4", name: "火殺", type: "基本牌"},
+            {suit: "方塊", num: "5", name: "火殺", type: "基本牌"},
+
+            // 閃 (24張)
+            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "8", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "9", name: "閃", type: "基本牌"},
             {suit: "紅桃", num: "J", name: "閃", type: "基本牌"},
-            {suit: "紅桃", num: "J", name: "無中生有", type: "錦囊牌"},
-            {suit: "紅桃", num: "Q", name: "桃", type: "基本牌"},
-            {suit: "紅桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
             {suit: "紅桃", num: "Q", name: "閃", type: "基本牌"},
             {suit: "紅桃", num: "K", name: "閃", type: "基本牌"},
-            {suit: "紅桃", num: "K", name: "爪黃飛電 (+1)", type: "裝備牌（坐騎）"},
-            {suit: "紅桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "3", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "4", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "5", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "3", name: "閃", type: "基本牌"},
 
-            // 梅花 (39張)
-            {suit: "梅花", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
+            // 桃 (12張)
+            {suit: "紅桃", num: "3", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "4", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "5", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "6", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "7", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "8", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "9", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "Q", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "2", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "3", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "Q", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "4", name: "桃", type: "基本牌"},
+
+            // 酒 (5張)
+            {suit: "黑桃", num: "3", name: "酒", type: "基本牌"},
+            {suit: "黑桃", num: "9", name: "酒", type: "基本牌"},
+            {suit: "梅花", num: "3", name: "酒", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "酒", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "酒", type: "基本牌"},
+
+            // --- 錦囊牌 (50張) ---
+            {suit: "黑桃", num: "A", name: "決鬥", type: "錦囊牌"},
             {suit: "梅花", num: "A", name: "決鬥", type: "錦囊牌"},
-            {suit: "梅花", num: "A", name: "白銀獅子", type: "裝備牌（防具）"},
+            {suit: "方塊", num: "A", name: "決鬥", type: "錦囊牌"},
+            {suit: "黑桃", num: "3", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "4", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "梅花", num: "3", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "梅花", num: "4", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "紅桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "3", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "黑桃", num: "4", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "黑桃", num: "J", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "方塊", num: "3", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "方塊", num: "4", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "紅桃", num: "7", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "8", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "9", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "J", name: "無中生有", type: "錦囊牌"},
+            {suit: "黑桃", num: "J", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "黑桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "紅桃", num: "A", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "紅桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "J", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "黑桃", num: "7", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "黑桃", num: "K", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "梅花", num: "7", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "紅桃", num: "A", name: "萬箭齊發", type: "錦囊牌"},
+            {suit: "紅桃", num: "A", name: "桃園結義", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "借刀殺人", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "借刀殺人", type: "錦囊牌"},
+            {suit: "紅桃", num: "3", name: "五谷豐登", type: "錦囊牌"},
+            {suit: "紅桃", num: "4", name: "五谷豐登", type: "錦囊牌"},
+            {suit: "紅桃", num: "2", name: "火攻", type: "錦囊牌"},
+            {suit: "紅桃", num: "3", name: "火攻", type: "錦囊牌"},
+            {suit: "方塊", num: "Q", name: "火攻", type: "錦囊牌"},
+            {suit: "黑桃", num: "J", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "黑桃", num: "Q", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "10", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "J", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "鐵索連環", type: "錦囊牌"},
+            // 延時錦囊 (7張)
+            {suit: "黑桃", num: "A", name: "閃電", type: "錦囊牌（延時）"},
+            {suit: "方塊", num: "A", name: "閃電", type: "錦囊牌（延時）"},
+            {suit: "黑桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "紅桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "梅花", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "黑桃", num: "10", name: "兵糧寸斷", type: "錦囊牌（延時）"},
+            {suit: "梅花", num: "4", name: "兵糧寸斷", type: "錦囊牌（延時）"},
+
+            // --- 裝備牌 (26張：含武器12、防具6、坐騎6、木牛流馬1) ---
+            {suit: "黑桃", num: "A", name: "古錠刀", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "2", name: "雌雄雙股劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "2", name: "寒冰劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "5", name: "青龍偃月刀", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "6", name: "青釭劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "Q", name: "丈八蛇矛", type: "裝備牌（武器）"},
+            {suit: "紅桃", num: "5", name: "麒麟弓", type: "裝備牌（武器）"},
+            {suit: "梅花", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "A", name: "朱雀羽扇", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "5", name: "貫石斧", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "Q", name: "方天畫戟", type: "裝備牌（武器）"},
+            
+            {suit: "黑桃", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
+            {suit: "黑桃", num: "2", name: "藤甲", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "仁王盾", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "藤甲", type: "裝備牌（防具）"},
-            {suit: "梅花", num: "3", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "3", name: "過河拆橋", type: "錦囊牌"},
-            {suit: "梅花", num: "3", name: "酒", type: "基本牌"},
-            {suit: "梅花", num: "4", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "4", name: "過河拆橋", type: "錦囊牌"},
-            {suit: "梅花", num: "4", name: "兵糧寸斷", type: "錦囊牌（延時）"},
-            {suit: "梅花", num: "5", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "A", name: "白銀獅子", type: "裝備牌（防具）"},
+            
+            {suit: "黑桃", num: "5", name: "絕影 (+1)", type: "裝備牌（坐騎）"},
+            {suit: "黑桃", num: "K", name: "大宛 (-1)", type: "裝備牌（坐騎）"},
+            {suit: "紅桃", num: "5", name: "赤兔 (-1)", type: "裝備牌（坐騎）"},
+            {suit: "紅桃", num: "K", name: "爪黃飛電 (+1)", type: "裝備牌（坐騎）"},
             {suit: "梅花", num: "5", name: "的盧 (+1)", type: "裝備牌（坐騎）"},
-            {suit: "梅花", num: "5", name: "雷殺", type: "基本牌"},
-            {suit: "梅花", num: "6", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
-            {suit: "梅花", num: "6", name: "雷殺", type: "基本牌"},
-            {suit: "梅花", num: "7", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "7", name: "南蠻入侵", type: "錦囊牌"},
-            {suit: "梅花", num: "7", name: "雷殺", type: "基本牌"},
-            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "8", name: "雷殺", type: "基本牌"},
-            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "9", name: "酒", type: "基本牌"},
-            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "10", name: "鐵索連環", type: "錦囊牌"},
-            {suit: "梅花", num: "J", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "J", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "梅花", num: "J", name: "鐵索連環", type: "錦囊牌"},
-            {suit: "梅花", num: "Q", name: "殺（普）", type: "基本牌"},
-            {suit: "梅花", num: "Q", name: "借刀殺人", type: "錦囊牌"},
-            {suit: "梅花", num: "Q", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "梅花", num: "Q", name: "鐵索連環", type: "錦囊牌"},
-            {suit: "梅花", num: "K", name: "借刀殺人", type: "錦囊牌"},
-            {suit: "梅花", num: "K", name: "無懈可擊", type: "錦囊牌"},
-            {suit: "梅花", num: "K", name: "鐵索連環", type: "錦囊牌"},
-
-            // 方塊 (44張)
-            {suit: "方塊", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
-            {suit: "方塊", num: "A", name: "決鬥", type: "錦囊牌"},
-            {suit: "方塊", num: "A", name: "朱雀羽扇", type: "裝備牌（武器）"},
-            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "2", name: "桃", type: "基本牌"},
-            {suit: "方塊", num: "3", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "3", name: "順手牽羊", type: "錦囊牌"},
-            {suit: "方塊", num: "3", name: "桃", type: "基本牌"},
-            {suit: "方塊", num: "4", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "4", name: "順手牽羊", type: "錦囊牌"},
-            {suit: "方塊", num: "4", name: "火殺", type: "基本牌"},
-            {suit: "方塊", num: "5", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "5", name: "貫石斧", type: "裝備牌（武器）"},
-            {suit: "方塊", num: "5", name: "火殺", type: "基本牌"},
-            {suit: "方塊", num: "5", name: "木牛流馬", type: "裝備牌（寶物）"},
-            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "6", name: "殺（普）", type: "基本牌"},
-            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "7", name: "殺（普）", type: "基本牌"},
-            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "8", name: "殺（普）", type: "基本牌"},
-            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "9", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "9", name: "殺（普）", type: "基本牌"},
-            {suit: "方塊", num: "9", name: "酒", type: "基本牌"},
-            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "10", name: "殺（普）", type: "基本牌"},
-            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
-            {suit: "方塊", num: "Q", name: "桃", type: "基本牌"},
-            {suit: "方塊", num: "Q", name: "方天畫戟", type: "裝備牌（武器）"},
-            {suit: "方塊", num: "Q", name: "火攻", type: "錦囊牌"},
-            {suit: "方塊", num: "K", name: "殺（普）", type: "基本牌"},
             {suit: "方塊", num: "K", name: "紫騂 (-1)", type: "裝備牌（坐騎）"},
-            {suit: "方塊", num: "K", name: "驊骝 (+1)", type: "裝備牌（坐騎）"}
+            {suit: "方塊", num: "K", name: "驊骝 (+1)", type: "裝備牌（坐騎）"},
+            
+            // 寶物牌 (木牛流馬，標準為方塊5)
+            {suit: "方塊", num: "5", name: "木牛流馬", type: "裝備牌（寶物）"}
         ];
 
         let currentDeck = [];
