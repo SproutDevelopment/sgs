@@ -422,7 +422,7 @@
                 newDeck.splice(newDeck.length - x, x, ...modifiedSubList);
             }
 
-            // 寫回 Firebase，所有人同步
+            // 寫回 Firebase，同步
             deckRef.set(newDeck).then(() => {
                 alert("牌序已成功更新並同步給所有人！");
                 closeModal();
