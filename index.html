@@ -2,17 +2,17 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>三國殺共用牌堆與手牌模擬器</title>
+    <title>三國殺共用牌堆與玩家狀態模擬器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6">
 
-    <div class="max-w-4xl mx-auto space-y-6">
-        <!-- 標題與狀態 -->
+    <div class="max-w-5xl mx-auto space-y-6">
+        <!-- 標題與牌堆狀態 -->
         <header class="text-center bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
-            <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺牌堆與手牌系統</h1>
+            <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺桌面模擬系統</h1>
             <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">載入中...</span></p>
             <div id="error-msg" class="text-red-400 text-sm mt-2 font-bold"></div>
             <div class="mt-4 flex justify-center gap-4">
@@ -20,46 +20,100 @@
             </div>
         </header>
 
-        <!-- 摸牌操作面板 -->
-        <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- 牌堆頂 -->
-            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
-                <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆頂操作</h2>
-                <div class="flex gap-2">
-                    <input type="number" id="draw-top-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
-                    <button onclick="drawCards('top')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆頂摸牌</button>
+        <!-- 頁籤切換 -->
+        <div class="flex border-b border-slate-700 gap-2">
+            <button onclick="switchTab('my-desk')" id="tab-btn-my-desk" class="px-5 py-2.5 font-bold text-amber-400 border-b-2 border-amber-400 transition">我的桌面與手牌</button>
+            <button onclick="switchTab('players-status')" id="tab-btn-players-status" class="px-5 py-2.5 font-bold text-slate-400 hover:text-white transition">🔍 查看所有人狀態</button>
+        </div>
+
+        <!-- ================= 區塊 1：我的桌面與手牌 ================= -->
+        <div id="tab-my-desk" class="space-y-6">
+            <!-- 玩家識別設定 -->
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <label class="text-sm font-bold text-slate-300 whitespace-nowrap">您的玩家名稱：</label>
+                    <input type="text" id="player-name-input" value="玩家1" onchange="updatePlayerProfile()" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-white font-bold w-full sm:w-48">
                 </div>
-                <div class="flex gap-2 pt-2 border-t border-slate-700">
-                    <input type="number" id="top-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
-                    <button onclick="viewCards('top')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
+                <button onclick="resetMyStatus()" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-1.5 rounded text-sm font-bold transition w-full sm:w-auto">重置我的血量/裝備/手牌</button>
+            </div>
+
+            <!-- 血量與裝備欄 (玩家狀態面板) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- 血量系統 -->
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col justify-between space-y-4">
+                    <h2 class="text-lg font-semibold text-amber-300">血量系統 (Health)</h2>
+                    <div class="flex items-center gap-3 justify-center">
+                        <input type="number" id="hp-current" value="4" min="0" onchange="updatePlayerProfile()" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 w-24 text-center text-xl font-bold text-emerald-400">
+                        <span class="text-2xl font-bold text-slate-500">/</span>
+                        <input type="number" id="hp-max" value="4" min="1" onchange="updatePlayerProfile()" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 w-24 text-center text-xl font-bold text-white">
+                    </div>
+                    <p class="text-xs text-slate-400 text-center">格式：當前血量 / 最大血量 (數值變動會即時同步)</p>
+                </div>
+
+                <!-- 裝備欄 (上限 5 張) -->
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col justify-between space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-amber-300">裝備欄 (上限 5)</h2>
+                        <span id="equip-count" class="text-xs bg-slate-900 px-2 py-1 rounded text-slate-400">0 / 5</span>
+                    </div>
+                    <div id="equipment-container" class="grid grid-cols-5 gap-2 bg-slate-900 p-3 rounded-lg border border-slate-700 min-h-[75px] items-center">
+                        <p class="text-slate-500 col-span-full text-center text-xs">尚無裝備</p>
+                    </div>
+                    <button onclick="openEquipSelectModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-amber-300 text-xs py-1.5 rounded font-bold transition">+ 裝備新武器/防具/寶物</button>
                 </div>
             </div>
 
-            <!-- 牌堆底 -->
-            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
-                <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆底操作</h2>
-                <div class="flex gap-2">
-                    <input type="number" id="draw-bottom-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
-                    <button onclick="drawCards('bottom')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆底摸牌</button>
+            <!-- 摸牌操作面板 -->
+            <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- 牌堆頂 -->
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
+                    <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆頂操作</h2>
+                    <div class="flex gap-2">
+                        <input type="number" id="draw-top-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
+                        <button onclick="drawCards('top')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆頂摸牌</button>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-slate-700">
+                        <input type="number" id="top-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
+                        <button onclick="viewCards('top')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
+                    </div>
                 </div>
-                <div class="flex gap-2 pt-2 border-t border-slate-700">
-                    <input type="number" id="bottom-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
-                    <button onclick="viewCards('bottom')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
-                </div>
-            </div>
-        </section>
 
-        <!-- 手牌區 -->
-        <section class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-4">
-            <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
-                <h2 class="text-xl font-bold text-amber-400">我的手牌區 (<span id="hand-count">0</span> 張)</h2>
-                <button onclick="openAddCardModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition text-sm">+ 從清單自選加牌</button>
+                <!-- 牌堆底 -->
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
+                    <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆底操作</h2>
+                    <div class="flex gap-2">
+                        <input type="number" id="draw-bottom-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
+                        <button onclick="drawCards('bottom')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆底摸牌</button>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-slate-700">
+                        <input type="number" id="bottom-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
+                        <button onclick="viewCards('bottom')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 手牌區 -->
+            <section class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <h2 class="text-xl font-bold text-amber-400">我的手牌區 (<span id="hand-count">0</span> 張)</h2>
+                    <button onclick="openAddCardModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition text-sm">+ 從清單自選加牌</button>
+                </div>
+                <div id="hand-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 min-h-[100px] bg-slate-900 p-4 rounded-lg border border-slate-700">
+                    <p class="text-slate-500 col-span-full text-center py-6">目前沒有手牌</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- ================= 區塊 2：檢視所有人狀態 (不同電腦同步) ================= -->
+        <div id="tab-players-status" class="space-y-6 hidden">
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+                <h2 class="text-xl font-bold text-amber-400">目前連線中的所有玩家狀態</h2>
+                <p class="text-xs text-slate-400">這裡會同步顯示所有開啟網頁並設定名稱的玩家血量與裝備。</p>
+                <div id="all-players-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <p class="text-slate-500 col-span-full text-center py-8">正在載入其他玩家資料...</p>
+                </div>
             </div>
-            <!-- 手牌展示清單 -->
-            <div id="hand-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 min-h-[100px] bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p class="text-slate-500 col-span-full text-center py-6">目前沒有手牌</p>
-            </div>
-        </section>
+        </div>
 
         <!-- 彈窗：檢視與調整順序 -->
         <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50 p-4">
@@ -87,7 +141,7 @@
         </div>
     </div>
 
-    <!-- Firebase 與邏輯 -->
+    <!-- Firebase 與核心邏輯 -->
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDO_8ZwioSIb_pWFLP4VKNcAxjhrhNVU3c",
@@ -108,9 +162,18 @@
 
         const db = firebase.database();
         const deckRef = db.ref('sanguosha/deck');
-        const handRef = db.ref('sanguosha/hand');
+        
+        // 產生一個專屬這台電腦的隨機玩家ID
+        let myClientId = localStorage.getItem('sanguosha_client_id');
+        if (!myClientId) {
+            myClientId = 'player_' + Math.random().toString(36).substring(2, 9);
+            localStorage.setItem('sanguosha_client_id', myClientId);
+        }
 
-        // 完整 161 張牌資料定義
+        const playerRef = db.ref(`sanguosha/players/${myClientId}`);
+        const allPlayersRef = db.ref('sanguosha/players');
+
+        // 161 張標準+軍爭牌庫
         const masterDeckData = [
             // 基本牌 (85張)
             {suit: "黑桃", num: "7", name: "殺（普）", type: "基本牌"},
@@ -281,8 +344,29 @@
         ];
 
         let currentDeck = [];
-        let currentHand = [];
+        let myData = {
+            name: "玩家1",
+            hpCurrent: 4,
+            hpMax: 4,
+            hand: [],
+            equipment: []
+        };
         let currentViewMode = '';
+
+        // 初始化載入玩家資料
+        playerRef.once('value', (snapshot) => {
+            if (snapshot.exists()) {
+                myData = snapshot.val();
+                if(!myData.equipment) myData.equipment = [];
+                if(!myData.hand) myData.hand = [];
+                document.getElementById('player-name-input').value = myData.name || "玩家1";
+                document.getElementById('hp-current').value = myData.hpCurrent ?? 4;
+                document.getElementById('hp-max').value = myData.hpMax ?? 4;
+            } else {
+                updatePlayerProfile();
+            }
+            renderUI();
+        });
 
         // 監聽牌堆
         deckRef.on('value', (snapshot) => {
@@ -292,15 +376,13 @@
             } else {
                 currentDeck = data;
                 document.getElementById('pile-count').innerText = currentDeck.length;
-                document.getElementById('error-msg').innerText = '';
             }
         });
 
-        // 監聽手牌區
-        handRef.on('value', (snapshot) => {
-            const data = snapshot.val();
-            currentHand = data ? data : [];
-            renderHandCards();
+        // 監聽所有人狀態
+        allPlayersRef.on('value', (snapshot) => {
+            const players = snapshot.val();
+            renderAllPlayers(players);
         });
 
         function shuffle(array) {
@@ -318,7 +400,48 @@
             deckRef.set(shuffled);
         }
 
-        // 摸多張牌功能
+        // 分頁切換
+        function switchTab(tabId) {
+            document.getElementById('tab-my-desk').classList.add('hidden');
+            document.getElementById('tab-players-status').classList.add('hidden');
+            document.getElementById('tab-btn-my-desk').className = "px-5 py-2.5 font-bold text-slate-400 hover:text-white transition border-b-2 border-transparent";
+            document.getElementById('tab-btn-players-status').className = "px-5 py-2.5 font-bold text-slate-400 hover:text-white transition border-b-2 border-transparent";
+
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tabId}`).className = "px-5 py-2.5 font-bold text-amber-400 border-b-2 border-amber-400 transition";
+        }
+
+        // 更新我的狀態到 Firebase
+        function updatePlayerProfile() {
+            myData.name = document.getElementById('player-name-input').value || "無名玩家";
+            myData.hpCurrent = parseInt(document.getElementById('hp-current').value) || 0;
+            myData.hpMax = parseInt(document.getElementById('hp-max').value) || 1;
+            playerRef.set(myData);
+        }
+
+        function saveMyData() {
+            playerRef.set(myData);
+            renderUI();
+        }
+
+        function resetMyStatus() {
+            if(confirm("確定要重置您的血量、裝備與手牌嗎？")) {
+                myData.hpCurrent = 4;
+                myData.hpMax = 4;
+                myData.hand = [];
+                myData.equipment = [];
+                document.getElementById('hp-current').value = 4;
+                document.getElementById('hp-max').value = 4;
+                saveMyData();
+            }
+        }
+
+        function renderUI() {
+            renderHandCards();
+            renderEquipment();
+        }
+
+        // 摸牌功能 (支援牌堆頂/底、多張)
         function drawCards(position) {
             const countInputId = position === 'top' ? 'draw-top-count' : 'draw-bottom-count';
             let count = parseInt(document.getElementById(countInputId).value);
@@ -330,7 +453,6 @@
 
             deckRef.transaction((deck) => {
                 if (!deck || deck.length === 0) return deck;
-                
                 let actualDrawCount = Math.min(count, deck.length);
                 let drawnCards = [];
 
@@ -341,39 +463,36 @@
                         drawnCards.push(deck.pop());
                     }
                 }
-
-                // 將抽到的牌放入手牌
-                if (!window.tempHandToAdd) window.tempHandToAdd = [];
-                window.tempHandToAdd = drawnCards;
-
+                window.tempDrawnCards = drawnCards;
                 return deck;
             }, (error, committed) => {
-                if (committed && window.tempHandToAdd && window.tempHandToAdd.length > 0) {
-                    // 更新到 Firebase 手牌區
-                    let newHand = [...currentHand, ...window.tempHandToAdd];
-                    handRef.set(newHand);
-                    window.tempHandToAdd = [];
+                if (committed && window.tempDrawnCards && window.tempDrawnCards.length > 0) {
+                    if(!myData.hand) myData.hand = [];
+                    myData.hand.push(...window.tempDrawnCards);
+                    window.tempDrawnCards = [];
+                    saveMyData();
                 } else {
                     alert("牌堆已經空了！");
                 }
             });
         }
 
-        // 渲染手牌區畫面
+        // 渲染手牌區
         function renderHandCards() {
             const container = document.getElementById('hand-container');
-            document.getElementById('hand-count').innerText = currentHand.length;
+            const hand = myData.hand || [];
+            document.getElementById('hand-count').innerText = hand.length;
             container.innerHTML = '';
 
-            if (currentHand.length === 0) {
+            if (hand.length === 0) {
                 container.innerHTML = `<p class="text-slate-500 col-span-full text-center py-6">目前沒有手牌</p>`;
                 return;
             }
 
-            currentHand.forEach((card, index) => {
+            hand.forEach((card, index) => {
                 let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-400' : 'text-slate-200';
                 const cardEl = document.createElement('div');
-                cardEl.className = "bg-slate-900 border border-slate-700 rounded-lg p-3 flex flex-col justify-between shadow relative group hover:border-amber-500 transition";
+                cardEl.className = "bg-slate-900 border border-slate-700 rounded-lg p-3 flex flex-col justify-between shadow relative hover:border-amber-500 transition";
                 
                 cardEl.innerHTML = `
                     <div>
@@ -384,35 +503,90 @@
                         <div class="text-sm font-bold text-amber-300 my-1 truncate">${card.name}</div>
                         <div class="text-[10px] text-slate-400 truncate">${card.type}</div>
                     </div>
-                    <div class="flex gap-1 mt-2 pt-2 border-t border-slate-800">
-                        <button onclick="discardCard(${index}, 'none')" class="flex-1 bg-red-900/60 hover:bg-red-700 text-red-200 text-xs py-1 rounded transition" title="直接丟棄">丟棄</button>
-                        <button onclick="discardCard(${index}, 'bottom')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-1 rounded transition" title="洗回牌堆底">回底</button>
+                    <div class="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-800">
+                        <button onclick="cardAction(${index}, 'equip')" class="bg-amber-800/60 hover:bg-amber-700 text-amber-200 text-[10px] py-1 rounded transition" title="裝備">裝備</button>
+                        <button onclick="cardAction(${index}, 'top')" class="bg-blue-900/60 hover:bg-blue-700 text-blue-200 text-[10px] py-1 rounded transition" title="洗回牌堆頂">回頂</button>
+                        <button onclick="cardAction(${index}, 'bottom')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] py-1 rounded transition" title="洗回牌堆底">回底</button>
                     </div>
+                    <button onclick="cardAction(${index}, 'discard')" class="w-full bg-red-900/40 hover:bg-red-700 text-red-200 text-[10px] py-0.5 rounded mt-1 transition">直接丟棄</button>
                 `;
                 container.appendChild(cardEl);
             });
         }
 
-        // 丟棄或洗回牌堆
-        function discardCard(index, action) {
-            let cardToDiscard = currentHand[index];
-            currentHand.splice(index, 1);
+        // 手牌互動處理 (回頂、回底、裝備、丟棄)
+        function cardAction(index, action) {
+            let card = myData.hand[index];
+            myData.hand.splice(index, 1);
 
-            // 更新手牌區
-            handRef.set(currentHand).then(() => {
-                if (action === 'bottom') {
-                    // 將牌放回牌堆底
-                    deckRef.transaction((deck) => {
-                        if (!deck) deck = [];
-                        deck.push(cardToDiscard);
-                        return deck;
-                    });
+            if (action === 'discard') {
+                saveMyData();
+            } else if (action === 'top' || action === 'bottom') {
+                saveMyData();
+                deckRef.transaction((deck) => {
+                    if (!deck) deck = [];
+                    if (action === 'top') deck.unshift(card);
+                    else deck.push(card);
+                    return deck;
+                });
+            } else if (action === 'equip') {
+                if (!myData.equipment) myData.equipment = [];
+                if (myData.equipment.length >= 5) {
+                    alert("裝備欄已滿 (上限 5 張)！");
+                    myData.hand.push(card); // 放回手牌
+                    return;
                 }
+                myData.equipment.push(card);
+                saveMyData();
+            }
+        }
+
+        // 渲染裝備欄
+        function renderEquipment() {
+            const container = document.getElementById('equipment-container');
+            const equip = myData.equipment || [];
+            document.getElementById('equip-count').innerText = `${equip.length} / 5`;
+            container.innerHTML = '';
+
+            if (equip.length === 0) {
+                container.innerHTML = `<p class="text-slate-500 col-span-full text-center text-xs">尚無裝備</p>`;
+                return;
+            }
+
+            equip.forEach((card, index) => {
+                let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-400' : 'text-slate-200';
+                const el = document.createElement('div');
+                el.className = "bg-slate-800 border border-amber-600/60 rounded p-2 flex flex-col justify-between text-center relative group";
+                el.innerHTML = `
+                    <div>
+                        <div class="text-[10px] font-bold ${colorClass}">${card.suit} ${card.num}</div>
+                        <div class="text-xs font-bold text-amber-300 truncate my-0.5">${card.name}</div>
+                    </div>
+                    <button onclick="removeEquipment(${index})" class="text-[9px] bg-red-900/60 hover:bg-red-700 text-red-200 rounded py-0.5 mt-1 transition">卸下</button>
+                `;
+                container.appendChild(el);
             });
         }
 
-        // 開啟自選加牌彈窗
-        function openAddCardModal() {
+        function removeEquipment(index) {
+            let card = myData.equipment.splice(index, 1)[0];
+            if (!myData.hand) myData.hand = [];
+            myData.hand.push(card); // 卸下後回到手牌
+            saveMyData();
+        }
+
+        // 從清單直接裝備 (滿 5 張限制)
+        function openEquipSelectModal() {
+            if ((myData.equipment || []).length >= 5) {
+                alert("裝備欄已滿 (上限 5 張)！");
+                return;
+            }
+            openAddCardModal(true); // true 代表是選裝備進裝備欄
+        }
+
+        let isSelectingForEquip = false;
+        function openAddCardModal(forEquip = false) {
+            isSelectingForEquip = forEquip;
             renderMasterSelectList(masterDeckData);
             document.getElementById('add-card-modal').classList.remove('hidden');
         }
@@ -426,15 +600,16 @@
                 const item = document.createElement('div');
                 item.className = "flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700 hover:bg-slate-700/50 transition cursor-pointer";
                 
+                let btnText = isSelectingForEquip ? "放入裝備欄" : "加入手牌";
                 item.innerHTML = `
                     <div class="flex items-center gap-3">
                         <span class="font-bold ${colorClass}">${card.suit} ${card.num}</span>
                         <span class="text-white font-medium">${card.name}</span>
                         <span class="text-xs text-slate-400">(${card.type})</span>
                     </div>
-                    <button class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1 rounded font-bold">加入手牌</button>
+                    <button class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1 rounded font-bold">${btnText}</button>
                 `;
-                item.onclick = () => addSpecificCardToHand(card);
+                item.onclick = () => selectCardFromMaster(card);
                 listContainer.appendChild(item);
             });
         }
@@ -449,13 +624,70 @@
             renderMasterSelectList(filtered);
         }
 
-        function addSpecificCardToHand(card) {
-            let newHand = [...currentHand, card];
-            handRef.set(newHand);
+        function selectCardFromMaster(card) {
+            if (isSelectingForEquip) {
+                if (!myData.equipment) myData.equipment = [];
+                if (myData.equipment.length >= 5) {
+                    alert("裝備欄已滿！");
+                    return;
+                }
+                myData.equipment.push(card);
+            } else {
+                if (!myData.hand) myData.hand = [];
+                myData.hand.push(card);
+            }
+            saveMyData();
             closeModal('add-card-modal');
         }
 
-        // 檢視牌堆頂/底
+        // 渲染所有玩家狀態 (多人檢視分頁)
+        function renderAllPlayers(playersObj) {
+            const container = document.getElementById('all-players-container');
+            container.innerHTML = '';
+
+            if (!playersObj) {
+                container.innerHTML = `<p class="text-slate-500 col-span-full text-center py-8">目前沒有其他玩家連線</p>`;
+                return;
+            }
+
+            Object.keys(playersObj).forEach(id => {
+                const p = playersObj[id];
+                const isMe = (id === myClientId);
+                const equip = p.equipment || [];
+                const handCount = (p.hand || []).length;
+
+                const cardEl = document.createElement('div');
+                cardEl.className = `bg-slate-900 border ${isMe ? 'border-amber-500' : 'border-slate-700'} p-4 rounded-xl space-y-3`;
+
+                let equipHtml = equip.length === 0 ? `<span class="text-xs text-slate-500">無裝備</span>` : 
+                    equip.map(eq => {
+                        let cClass = (eq.suit === '紅桃' || eq.suit === '方塊') ? 'text-red-400' : 'text-slate-300';
+                        return `<div class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs"><span class="${cClass}">${eq.suit} ${eq.num}</span> <span class="text-amber-300">${eq.name}</span></div>`;
+                    }).join('');
+
+                cardEl.innerHTML = `
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <div class="font-bold text-lg text-white flex items-center gap-2">
+                            ${p.name || '未命名'} ${isMe ? '<span class="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">你</span>' : ''}
+                        </div>
+                        <div class="text-sm bg-slate-800 px-3 py-1 rounded border border-slate-700">
+                            ❤️ 血量：<span class="text-emerald-400 font-bold text-base">${p.hpCurrent ?? 4}</span> / <span class="text-white font-bold">${p.hpMax ?? 4}</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>手牌數量：<b class="text-white">${handCount} 張</b></span>
+                        <span>裝備欄：<b class="text-white">${equip.length} / 5</b></span>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="text-xs text-slate-400 font-bold">已裝備物品：</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${equipHtml}</div>
+                    </div>
+                `;
+                container.appendChild(cardEl);
+            });
+        }
+
+        // 牌堆頂/底檢視與排序
         function viewCards(position) {
             currentViewMode = position;
             const inputId = position === 'top' ? 'top-x-input' : 'bottom-x-input';
@@ -542,4 +774,3 @@
     </script>
 </body>
 </html>
-        
