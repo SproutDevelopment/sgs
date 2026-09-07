@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>三國殺共用牌堆模擬器</title>
+    <!-- 引入 Tailwind CSS 進行美化 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Firebase SDK (Compat 版本以簡化即時資料庫寫法) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        <!-- 標題與狀態 -->
+        <header class="text-center bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
+            <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺共用牌堆系統</h1>
+            <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">載入中...</span></p>
+            <div class="mt-4 flex justify-center gap-4">
+                <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (161張)</button>
+            </div>
+        </header>
+
+        <!-- 摸牌操作面板 -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col items-center">
+                <h2 class="text-lg font-semibold mb-3 text-amber-300">牌堆頂操作</h2>
+                <button onclick="drawCard('top')" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold mb-4 transition">從牌堆頂摸一張牌</button>
+                <div class="flex w-full gap-2">
+                    <input type="number" id="top-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center">
+                    <button onclick="viewCards('top')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col items-center">
+                <h2 class="text-lg font-semibold mb-3 text-amber-300">牌堆底操作</h2>
+                <button onclick="drawCard('bottom')" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold mb-4 transition">從牌堆底摸一張牌</button>
+                <div class="flex w-full gap-2">
+                    <input type="number" id="bottom-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center">
+                    <button onclick="viewCards('bottom')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 抽牌結果顯示區 -->
+        <section id="result-container" class="bg-slate-800 p-6 rounded-xl border border-slate-700 text-center hidden">
+            <h3 class="text-slate-400 text-sm mb-1">您剛剛抽到的卡牌：</h3>
+            <div id="drawn-card-display" class="inline-block p-4 rounded-lg bg-slate-900 border-2 border-amber-500 shadow-xl my-2">
+                <!-- 動態填入卡牌資訊 -->
+            </div>
+        </section>
+
+        <!-- 彈窗：檢視與調整順序 -->
+        <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-xl p-6 max-h-[90vh] flex flex-col">
+                <h3 id="modal-title" class="text-xl font-bold text-amber-400 mb-4">調整牌序</h3>
+                <p class="text-xs text-slate-400 mb-2">提示：您可以上下拖曳或點擊按鈕改變順序，最上方代表牌堆頂端。</p>
+                
+                <div id="modal-card-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2">
+                    <!-- 動態產生卡牌列表供調整 -->
+                </div>
+
+                <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-700">
+                    <button onclick="closeModal()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">取消</button>
+                    <button onclick="saveCardOrder()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition">確認儲存新順序</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase 邏輯與遊戲主程式 -->
+    <script>
+        // ==========================================
+        // 1. 請填入您自己的 Firebase 專案設定
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const deckRef = db.ref('sanguosha/deck');
+
+        // ==========================================
+        // 2. 完整 161 張牌資料庫定義
+        // ==========================================
+        const masterDeckData = [
+            // 黑桃 (39張)
+            {suit: "黑桃", num: "A", name: "決鬥", type: "錦囊牌"},
+            {suit: "黑桃", num: "A", name: "閃電", type: "錦囊牌（延時）"},
+            {suit: "黑桃", num: "A", name: "古錠刀", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "2", name: "雌雄雙股劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
+            {suit: "黑桃", num: "2", name: "藤甲", type: "裝備牌（防具）"},
+            {suit: "黑桃", num: "2", name: "寒冰劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "3", name: "酒", type: "基本牌"},
+            {suit: "黑桃", num: "3", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "3", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "黑桃", num: "4", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "4", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "4", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "黑桃", num: "5", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "5", name: "青龍偃月刀", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "5", name: "絕影 (+1)", type: "裝備牌（坐騎）"},
+            {suit: "黑桃", num: "6", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "黑桃", num: "6", name: "青釭劍", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "7", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "7", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "7", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "8", name: "雷殺", type: "基本牌"},
+            {suit: "黑桃", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "9", name: "酒", type: "基本牌"},
+            {suit: "黑桃", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "黑桃", num: "10", name: "兵糧寸斷", type: "錦囊牌（延時）"},
+            {suit: "黑桃", num: "J", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "黑桃", num: "J", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "黑桃", num: "J", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "黑桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "黑桃", num: "Q", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "黑桃", num: "Q", name: "丈八蛇矛", type: "裝備牌（武器）"},
+            {suit: "黑桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "黑桃", num: "K", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "黑桃", num: "K", name: "大宛 (-1)", type: "裝備牌（坐騎）"},
+
+            // 紅桃 (39張)
+            {suit: "紅桃", num: "A", name: "萬箭齊發", type: "錦囊牌"},
+            {suit: "紅桃", num: "A", name: "桃園結義", type: "錦囊牌"},
+            {suit: "紅桃", num: "A", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "2", name: "火攻", type: "錦囊牌"},
+            {suit: "紅桃", num: "3", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "3", name: "五谷豐登", type: "錦囊牌"},
+            {suit: "紅桃", num: "3", name: "火攻", type: "錦囊牌"},
+            {suit: "紅桃", num: "4", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "4", name: "五谷豐登", type: "錦囊牌"},
+            {suit: "紅桃", num: "4", name: "火殺", type: "基本牌"},
+            {suit: "紅桃", num: "5", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "5", name: "赤兔 (-1)", type: "裝備牌（坐騎）"},
+            {suit: "紅桃", num: "5", name: "麒麟弓", type: "裝備牌（武器）"},
+            {suit: "紅桃", num: "6", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "紅桃", num: "7", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "7", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "7", name: "火殺", type: "基本牌"},
+            {suit: "紅桃", num: "8", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "8", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "8", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "9", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "9", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "9", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "紅桃", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "紅桃", num: "10", name: "火殺", type: "基本牌"},
+            {suit: "紅桃", num: "J", name: "殺（普）", type: "基本牌"},
+            {suit: "紅桃", num: "J", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "J", name: "無中生有", type: "錦囊牌"},
+            {suit: "紅桃", num: "Q", name: "桃", type: "基本牌"},
+            {suit: "紅桃", num: "Q", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "紅桃", num: "Q", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "K", name: "閃", type: "基本牌"},
+            {suit: "紅桃", num: "K", name: "爪黃飛電 (+1)", type: "裝備牌（坐騎）"},
+            {suit: "紅桃", num: "K", name: "無懈可擊", type: "錦囊牌"},
+
+            // 梅花 (39張)
+            {suit: "梅花", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
+            {suit: "梅花", num: "A", name: "決鬥", type: "錦囊牌"},
+            {suit: "梅花", num: "A", name: "白銀獅子", type: "裝備牌（防具）"},
+            {suit: "梅花", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
+            {suit: "梅花", num: "2", name: "仁王盾", type: "裝備牌（防具）"},
+            {suit: "梅花", num: "2", name: "藤甲", type: "裝備牌（防具）"},
+            {suit: "梅花", num: "3", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "3", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "梅花", num: "3", name: "酒", type: "基本牌"},
+            {suit: "梅花", num: "4", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "4", name: "過河拆橋", type: "錦囊牌"},
+            {suit: "梅花", num: "4", name: "兵糧寸斷", type: "錦囊牌（延時）"},
+            {suit: "梅花", num: "5", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "5", name: "的盧 (+1)", type: "裝備牌（坐騎）"},
+            {suit: "梅花", num: "5", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "6", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
+            {suit: "梅花", num: "6", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "7", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "7", name: "南蠻入侵", type: "錦囊牌"},
+            {suit: "梅花", num: "7", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "8", name: "雷殺", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "9", name: "酒", type: "基本牌"},
+            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "10", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "J", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "J", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "J", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "殺（普）", type: "基本牌"},
+            {suit: "梅花", num: "Q", name: "借刀殺人", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "Q", name: "鐵索連環", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "借刀殺人", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "無懈可擊", type: "錦囊牌"},
+            {suit: "梅花", num: "K", name: "鐵索連環", type: "錦囊牌"},
+
+            // 方塊 (44張)
+            {suit: "方塊", num: "A", name: "諸葛連弩", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "A", name: "決鬥", type: "錦囊牌"},
+            {suit: "方塊", num: "A", name: "朱雀羽扇", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "2", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "2", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "3", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "3", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "方塊", num: "3", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "4", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "4", name: "順手牽羊", type: "錦囊牌"},
+            {suit: "方塊", num: "4", name: "火殺", type: "基本牌"},
+            {suit: "方塊", num: "5", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "5", name: "貫石斧", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "5", name: "火殺", type: "基本牌"},
+            {suit: "方塊", num: "5", name: "木牛流馬", type: "裝備牌（寶物）"},
+            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "6", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "7", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "8", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "9", name: "酒", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "10", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
+            {suit: "方塊", num: "Q", name: "桃", type: "基本牌"},
+            {suit: "方塊", num: "Q", name: "方天畫戟", type: "裝備牌（武器）"},
+            {suit: "方塊", num: "Q", name: "火攻", type: "錦囊牌"},
+            {suit: "方塊", num: "K", name: "殺（普）", type: "基本牌"},
+            {suit: "方塊", num: "K", name: "紫騂 (-1)", type: "裝備牌（坐騎）"},
+            {suit: "方塊", num: "K", name: "驊骝 (+1)", type: "裝備牌（坐騎）"}
+        ];
+
+        let currentDeck = [];
+        let currentViewMode = ''; // 'top' 或 'bottom'
+
+        // 監聽資料庫即時更新
+        deckRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                // 如果資料庫是空的，自動初始化一副洗好的牌
+                initOrResetDeck();
+            } else {
+                currentDeck = data;
+                document.getElementById('pile-count').innerText = currentDeck.length;
+            }
+        });
+
+        // 洗牌演算法 (Fisher-Yates shuffle)
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // 初始化或重置牌堆
+        function initOrResetDeck() {
+            if (confirm("確定要重新洗牌並重置所有人的牌堆嗎？")) {
+                let shuffled = shuffle([...masterDeckData]);
+                deckRef.set(shuffled);
+                document.getElementById('result-container').classList.add('hidden');
+                alert("牌堆已重新隨機洗牌！");
+            }
+        }
+
+        // 抽牌功能 (top = 頂部, bottom = 底部)
+        function drawCard(position) {
+            deckRef.transaction((deck) => {
+                if (!deck || deck.length === 0) return deck;
+                
+                let card;
+                if (position === 'top') {
+                    card = deck.shift(); // 從陣列頭部拿
+                } else {
+                    card = deck.pop();   // 從陣列尾部拿
+                }
+                
+                // 暫存抽出的卡牌以便在交易完成後顯示
+                window.lastDrawnCard = card;
+                return deck;
+            }, (error, committed, snapshot) => {
+                if (committed && window.lastDrawnCard) {
+                    displayDrawnCard(window.lastDrawnCard);
+                } else {
+                    alert("牌堆已經空了！請點擊「強制重洗整副牌」。");
+                }
+            });
+        }
+
+        // 顯示摸到的卡牌
+        function displayDrawnCard(card) {
+            const container = document.getElementById('result-container');
+            const display = document.getElementById('drawn-card-display');
+            container.classList.remove('hidden');
+
+            let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-500' : 'text-slate-200';
+            
+            display.innerHTML = `
+                <div class="text-2xl font-black ${colorClass}">${card.suit} ${card.num}</div>
+                <div class="text-xl font-bold text-amber-300 my-1">${card.name}</div>
+                <div class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded inline-block">${card.type}</div>
+            `;
+        }
+
+        // 檢視 X 張牌
+        function viewCards(position) {
+            currentViewMode = position;
+            const inputId = position === 'top' ? 'top-x-input' : 'bottom-x-input';
+            let x = parseInt(document.getElementById(inputId).value);
+
+            if (isNaN(x) || x <= 0) {
+                alert("請輸入有效的正整數！");
+                return;
+            }
+            if (currentDeck.length === 0) {
+                alert("牌堆目前是空的！");
+                return;
+            }
+
+            x = Math.min(x, currentDeck.length);
+
+            // 擷取對應的子陣列
+            let targetCards = [];
+            if (position === 'top') {
+                targetCards = currentDeck.slice(0, x);
+            } else {
+                targetCards = currentDeck.slice(currentDeck.length - x);
+            }
+
+            renderModalList(targetCards, position);
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        // 渲染彈窗內的卡牌順序調整清單
+        function renderModalList(cards, position) {
+            const title = document.getElementById('modal-title');
+            title.innerText = position === 'top' ? `檢視並調整牌堆頂的 ${cards.length} 張牌` : `檢視並調整牌堆底的 ${cards.length} 張牌`;
+
+            const listContainer = document.getElementById('modal-card-list');
+            listContainer.innerHTML = '';
+
+            cards.forEach((card, index) => {
+                let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-400' : 'text-slate-300';
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700 card-item";
+                item.dataset.card = JSON.stringify(card);
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500 font-mono">#${index + 1}</span>
+                        <span class="font-bold ${colorClass}">${card.suit} ${card.num}</span>
+                        <span class="text-white">${card.name}</span>
+                        <span class="text-xs text-slate-400">(${card.type})</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="moveItem(this, 'up')" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs rounded">⬆️</button>
+                        <button onclick="moveItem(this, 'down')" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs rounded">⬇️</button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        // 上下移動按鈕邏輯
+        function moveItem(btn, direction) {
+            const item = btn.closest('.card-item');
+            if (direction === 'up' && item.previousElementSibling) {
+                item.parentNode.insertBefore(item, item.previousElementSibling);
+            } else if (direction === 'down' && item.nextElementSibling) {
+                item.parentNode.insertBefore(item.nextElementSibling, item);
+            }
+        }
+
+        // 關閉彈窗
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        // 儲存修改後的卡牌順序
+        function saveCardOrder() {
+            const items = document.querySelectorAll('#modal-card-list .card-item');
+            let modifiedSubList = Array.from(items).map(item => JSON.parse(item.dataset.card));
+
+            let newDeck = [...currentDeck];
+            let x = modifiedSubList.length;
+
+            if (currentViewMode === 'top') {
+                // 取代牌堆前端
+                newDeck.splice(0, x, ...modifiedSubList);
+            } else {
+                // 取代牌堆尾端
+                newDeck.splice(newDeck.length - x, x, ...modifiedSubList);
+            }
+
+            // 寫回 Firebase，所有人同步
+            deckRef.set(newDeck).then(() => {
+                alert("牌序已成功更新並同步給所有人！");
+                closeModal();
+            }).catch(error => {
+                alert("更新失敗：" + error.message);
+            });
+        }
+    </script>
+</body>
+</html>
