@@ -2,61 +2,92 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>三國殺共用牌堆模擬器</title>
+    <title>三國殺共用牌堆與手牌模擬器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-6">
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6">
 
     <div class="max-w-4xl mx-auto space-y-6">
+        <!-- 標題與狀態 -->
         <header class="text-center bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
-            <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺共用牌堆系統</h1>
+            <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺牌堆與手牌系統</h1>
             <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">載入中...</span></p>
             <div id="error-msg" class="text-red-400 text-sm mt-2 font-bold"></div>
             <div class="mt-4 flex justify-center gap-4">
-                <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (含木牛 161張)</button>
+                <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (161張)</button>
             </div>
         </header>
 
+        <!-- 摸牌操作面板 -->
         <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col items-center">
-                <h2 class="text-lg font-semibold mb-3 text-amber-300">牌堆頂操作</h2>
-                <button onclick="drawCard('top')" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold mb-4 transition">從牌堆頂摸一張牌</button>
-                <div class="flex w-full gap-2">
+            <!-- 牌堆頂 -->
+            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
+                <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆頂操作</h2>
+                <div class="flex gap-2">
+                    <input type="number" id="draw-top-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
+                    <button onclick="drawCards('top')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆頂摸牌</button>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-700">
                     <input type="number" id="top-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
                     <button onclick="viewCards('top')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
                 </div>
             </div>
 
-            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col items-center">
-                <h2 class="text-lg font-semibold mb-3 text-amber-300">牌堆底操作</h2>
-                <button onclick="drawCard('bottom')" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold mb-4 transition">從牌堆底摸一張牌</button>
-                <div class="flex w-full gap-2">
+            <!-- 牌堆底 -->
+            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col space-y-3">
+                <h2 class="text-lg font-semibold text-amber-300 text-center">牌堆底操作</h2>
+                <div class="flex gap-2">
+                    <input type="number" id="draw-bottom-count" min="1" value="1" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-20 text-center text-white">
+                    <button onclick="drawCards('bottom')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded font-bold transition">從牌堆底摸牌</button>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-700">
                     <input type="number" id="bottom-x-input" min="1" value="5" class="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-full text-center text-white">
                     <button onclick="viewCards('bottom')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded font-bold whitespace-nowrap transition">檢視並改序</button>
                 </div>
             </div>
         </section>
 
-        <section id="result-container" class="bg-slate-800 p-6 rounded-xl border border-slate-700 text-center hidden">
-            <h3 class="text-slate-400 text-sm mb-1">您剛剛抽到的卡牌：</h3>
-            <div id="drawn-card-display" class="inline-block p-4 rounded-lg bg-slate-900 border-2 border-amber-500 shadow-xl my-2"></div>
+        <!-- 手牌區 -->
+        <section class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+                <h2 class="text-xl font-bold text-amber-400">我的手牌區 (<span id="hand-count">0</span> 張)</h2>
+                <button onclick="openAddCardModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition text-sm">+ 從清單自選加牌</button>
+            </div>
+            <!-- 手牌展示清單 -->
+            <div id="hand-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 min-h-[100px] bg-slate-900 p-4 rounded-lg border border-slate-700">
+                <p class="text-slate-500 col-span-full text-center py-6">目前沒有手牌</p>
+            </div>
         </section>
 
+        <!-- 彈窗：檢視與調整順序 -->
         <div id="modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50 p-4">
             <div class="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-xl p-6 max-h-[90vh] flex flex-col">
                 <h3 id="modal-title" class="text-xl font-bold text-amber-400 mb-4">調整牌序</h3>
-                <p class="text-xs text-slate-400 mb-2">提示：您可以點擊上下按鈕改變順序，最上方代表牌堆頂端。</p>
+                <p class="text-xs text-slate-400 mb-2">提示：點擊上下按鈕改變順序，最上方代表牌堆頂端。</p>
                 <div id="modal-card-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2"></div>
                 <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-700">
-                    <button onclick="closeModal()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">取消</button>
+                    <button onclick="closeModal('modal')" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">取消</button>
                     <button onclick="saveCardOrder()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition">確認儲存新順序</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 彈窗：從清單自選加牌 -->
+        <div id="add-card-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-xl p-6 max-h-[90vh] flex flex-col">
+                <h3 class="text-xl font-bold text-amber-400 mb-2">從完整 161 張牌清單中挑選</h3>
+                <input type="text" id="card-search-input" oninput="filterCardList()" placeholder="搜尋卡牌名稱或花色..." class="bg-slate-900 border border-slate-600 rounded px-3 py-2 w-full text-white mb-3">
+                <div id="master-select-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2"></div>
+                <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-700">
+                    <button onclick="closeModal('add-card-modal')" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">關閉</button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Firebase 與邏輯 -->
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDO_8ZwioSIb_pWFLP4VKNcAxjhrhNVU3c",
@@ -77,11 +108,11 @@
 
         const db = firebase.database();
         const deckRef = db.ref('sanguosha/deck');
+        const handRef = db.ref('sanguosha/hand');
 
-        // 準確點算共 161 張牌的標準+軍爭牌庫（包含木牛流馬）
+        // 完整 161 張牌資料定義
         const masterDeckData = [
-            // --- 基本牌 (85張) ---
-            // 殺 (44張)
+            // 基本牌 (85張)
             {suit: "黑桃", num: "7", name: "殺（普）", type: "基本牌"},
             {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
             {suit: "黑桃", num: "8", name: "殺（普）", type: "基本牌"},
@@ -112,7 +143,6 @@
             {suit: "方塊", num: "10", name: "殺（普）", type: "基本牌"},
             {suit: "方塊", num: "K", name: "殺（普）", type: "基本牌"},
             {suit: "方塊", num: "6", name: "殺（普）", type: "基本牌"},
-            // 雷殺 (9張)
             {suit: "黑桃", num: "4", name: "雷殺", type: "基本牌"},
             {suit: "黑桃", num: "5", name: "雷殺", type: "基本牌"},
             {suit: "黑桃", num: "6", name: "雷殺", type: "基本牌"},
@@ -122,14 +152,11 @@
             {suit: "梅花", num: "6", name: "雷殺", type: "基本牌"},
             {suit: "梅花", num: "7", name: "雷殺", type: "基本牌"},
             {suit: "梅花", num: "8", name: "雷殺", type: "基本牌"},
-            // 火殺 (5張)
             {suit: "紅桃", num: "4", name: "火殺", type: "基本牌"},
             {suit: "紅桃", num: "7", name: "火殺", type: "基本牌"},
             {suit: "紅桃", num: "10", name: "火殺", type: "基本牌"},
             {suit: "方塊", num: "4", name: "火殺", type: "基本牌"},
             {suit: "方塊", num: "5", name: "火殺", type: "基本牌"},
-
-            // 閃 (24張)
             {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
             {suit: "紅桃", num: "2", name: "閃", type: "基本牌"},
             {suit: "紅桃", num: "8", name: "閃", type: "基本牌"},
@@ -154,8 +181,6 @@
             {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
             {suit: "方塊", num: "J", name: "閃", type: "基本牌"},
             {suit: "方塊", num: "3", name: "閃", type: "基本牌"},
-
-            // 桃 (12張)
             {suit: "紅桃", num: "3", name: "桃", type: "基本牌"},
             {suit: "紅桃", num: "4", name: "桃", type: "基本牌"},
             {suit: "紅桃", num: "5", name: "桃", type: "基本牌"},
@@ -168,15 +193,13 @@
             {suit: "方塊", num: "3", name: "桃", type: "基本牌"},
             {suit: "方塊", num: "Q", name: "桃", type: "基本牌"},
             {suit: "方塊", num: "4", name: "桃", type: "基本牌"},
-
-            // 酒 (5張)
             {suit: "黑桃", num: "3", name: "酒", type: "基本牌"},
             {suit: "黑桃", num: "9", name: "酒", type: "基本牌"},
             {suit: "梅花", num: "3", name: "酒", type: "基本牌"},
             {suit: "梅花", num: "9", name: "酒", type: "基本牌"},
             {suit: "方塊", num: "9", name: "酒", type: "基本牌"},
 
-            // --- 錦囊牌 (50張) ---
+            // 錦囊牌 (50張)
             {suit: "黑桃", num: "A", name: "決鬥", type: "錦囊牌"},
             {suit: "梅花", num: "A", name: "決鬥", type: "錦囊牌"},
             {suit: "方塊", num: "A", name: "決鬥", type: "錦囊牌"},
@@ -220,7 +243,6 @@
             {suit: "梅花", num: "J", name: "鐵索連環", type: "錦囊牌"},
             {suit: "梅花", num: "Q", name: "鐵索連環", type: "錦囊牌"},
             {suit: "梅花", num: "K", name: "鐵索連環", type: "錦囊牌"},
-            // 延時錦囊 (7張)
             {suit: "黑桃", num: "A", name: "閃電", type: "錦囊牌（延時）"},
             {suit: "方塊", num: "A", name: "閃電", type: "錦囊牌（延時）"},
             {suit: "黑桃", num: "6", name: "樂不思蜀", type: "錦囊牌（延時）"},
@@ -229,7 +251,7 @@
             {suit: "黑桃", num: "10", name: "兵糧寸斷", type: "錦囊牌（延時）"},
             {suit: "梅花", num: "4", name: "兵糧寸斷", type: "錦囊牌（延時）"},
 
-            // --- 裝備牌 (26張：含武器12、防具6、坐騎6、木牛流馬1) ---
+            // 裝備牌 (26張)
             {suit: "黑桃", num: "A", name: "古錠刀", type: "裝備牌（武器）"},
             {suit: "黑桃", num: "2", name: "雌雄雙股劍", type: "裝備牌（武器）"},
             {suit: "黑桃", num: "2", name: "寒冰劍", type: "裝備牌（武器）"},
@@ -242,14 +264,12 @@
             {suit: "方塊", num: "A", name: "朱雀羽扇", type: "裝備牌（武器）"},
             {suit: "方塊", num: "5", name: "貫石斧", type: "裝備牌（武器）"},
             {suit: "方塊", num: "Q", name: "方天畫戟", type: "裝備牌（武器）"},
-            
             {suit: "黑桃", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
             {suit: "黑桃", num: "2", name: "藤甲", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "八卦陣", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "仁王盾", type: "裝備牌（防具）"},
             {suit: "梅花", num: "2", name: "藤甲", type: "裝備牌（防具）"},
             {suit: "梅花", num: "A", name: "白銀獅子", type: "裝備牌（防具）"},
-            
             {suit: "黑桃", num: "5", name: "絕影 (+1)", type: "裝備牌（坐騎）"},
             {suit: "黑桃", num: "K", name: "大宛 (-1)", type: "裝備牌（坐騎）"},
             {suit: "紅桃", num: "5", name: "赤兔 (-1)", type: "裝備牌（坐騎）"},
@@ -257,14 +277,14 @@
             {suit: "梅花", num: "5", name: "的盧 (+1)", type: "裝備牌（坐騎）"},
             {suit: "方塊", num: "K", name: "紫騂 (-1)", type: "裝備牌（坐騎）"},
             {suit: "方塊", num: "K", name: "驊骝 (+1)", type: "裝備牌（坐騎）"},
-            
-            // 寶物牌 (木牛流馬，標準為方塊5)
             {suit: "方塊", num: "5", name: "木牛流馬", type: "裝備牌（寶物）"}
         ];
 
         let currentDeck = [];
+        let currentHand = [];
         let currentViewMode = '';
 
+        // 監聽牌堆
         deckRef.on('value', (snapshot) => {
             const data = snapshot.val();
             if (!data) {
@@ -274,9 +294,13 @@
                 document.getElementById('pile-count').innerText = currentDeck.length;
                 document.getElementById('error-msg').innerText = '';
             }
-        }, (error) => {
-            console.error(error);
-            document.getElementById('error-msg').innerText = "資料庫讀取失敗: " + error.message;
+        });
+
+        // 監聽手牌區
+        handRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            currentHand = data ? data : [];
+            renderHandCards();
         });
 
         function shuffle(array) {
@@ -291,47 +315,147 @@
 
         function initOrResetDeck() {
             let shuffled = shuffle([...masterDeckData]);
-            deckRef.set(shuffled).then(() => {
-                document.getElementById('result-container').classList.add('hidden');
-            }).catch(error => {
-                alert("重置失敗：" + error.message);
-            });
+            deckRef.set(shuffled);
         }
 
-        function drawCard(position) {
+        // 摸多張牌功能
+        function drawCards(position) {
+            const countInputId = position === 'top' ? 'draw-top-count' : 'draw-bottom-count';
+            let count = parseInt(document.getElementById(countInputId).value);
+
+            if (isNaN(count) || count <= 0) {
+                alert("請輸入有效的摸牌數量！");
+                return;
+            }
+
             deckRef.transaction((deck) => {
                 if (!deck || deck.length === 0) return deck;
-                let card;
-                if (position === 'top') {
-                    card = deck.shift();
-                } else {
-                    card = deck.pop();
+                
+                let actualDrawCount = Math.min(count, deck.length);
+                let drawnCards = [];
+
+                for (let i = 0; i < actualDrawCount; i++) {
+                    if (position === 'top') {
+                        drawnCards.push(deck.shift());
+                    } else {
+                        drawnCards.push(deck.pop());
+                    }
                 }
-                window.lastDrawnCard = card;
+
+                // 將抽到的牌放入手牌
+                if (!window.tempHandToAdd) window.tempHandToAdd = [];
+                window.tempHandToAdd = drawnCards;
+
                 return deck;
             }, (error, committed) => {
-                if (committed && window.lastDrawnCard) {
-                    displayDrawnCard(window.lastDrawnCard);
+                if (committed && window.tempHandToAdd && window.tempHandToAdd.length > 0) {
+                    // 更新到 Firebase 手牌區
+                    let newHand = [...currentHand, ...window.tempHandToAdd];
+                    handRef.set(newHand);
+                    window.tempHandToAdd = [];
                 } else {
                     alert("牌堆已經空了！");
                 }
             });
         }
 
-        function displayDrawnCard(card) {
-            const container = document.getElementById('result-container');
-            const display = document.getElementById('drawn-card-display');
-            container.classList.remove('hidden');
+        // 渲染手牌區畫面
+        function renderHandCards() {
+            const container = document.getElementById('hand-container');
+            document.getElementById('hand-count').innerText = currentHand.length;
+            container.innerHTML = '';
 
-            let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-500' : 'text-slate-200';
-            
-            display.innerHTML = `
-                <div class="text-2xl font-black ${colorClass}">${card.suit} ${card.num}</div>
-                <div class="text-xl font-bold text-amber-300 my-1">${card.name}</div>
-                <div class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded inline-block">${card.type}</div>
-            `;
+            if (currentHand.length === 0) {
+                container.innerHTML = `<p class="text-slate-500 col-span-full text-center py-6">目前沒有手牌</p>`;
+                return;
+            }
+
+            currentHand.forEach((card, index) => {
+                let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-400' : 'text-slate-200';
+                const cardEl = document.createElement('div');
+                cardEl.className = "bg-slate-900 border border-slate-700 rounded-lg p-3 flex flex-col justify-between shadow relative group hover:border-amber-500 transition";
+                
+                cardEl.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold ${colorClass}">${card.suit} ${card.num}</span>
+                            <span class="text-[10px] text-slate-500">#${index + 1}</span>
+                        </div>
+                        <div class="text-sm font-bold text-amber-300 my-1 truncate">${card.name}</div>
+                        <div class="text-[10px] text-slate-400 truncate">${card.type}</div>
+                    </div>
+                    <div class="flex gap-1 mt-2 pt-2 border-t border-slate-800">
+                        <button onclick="discardCard(${index}, 'none')" class="flex-1 bg-red-900/60 hover:bg-red-700 text-red-200 text-xs py-1 rounded transition" title="直接丟棄">丟棄</button>
+                        <button onclick="discardCard(${index}, 'bottom')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-1 rounded transition" title="洗回牌堆底">回底</button>
+                    </div>
+                `;
+                container.appendChild(cardEl);
+            });
         }
 
+        // 丟棄或洗回牌堆
+        function discardCard(index, action) {
+            let cardToDiscard = currentHand[index];
+            currentHand.splice(index, 1);
+
+            // 更新手牌區
+            handRef.set(currentHand).then(() => {
+                if (action === 'bottom') {
+                    // 將牌放回牌堆底
+                    deckRef.transaction((deck) => {
+                        if (!deck) deck = [];
+                        deck.push(cardToDiscard);
+                        return deck;
+                    });
+                }
+            });
+        }
+
+        // 開啟自選加牌彈窗
+        function openAddCardModal() {
+            renderMasterSelectList(masterDeckData);
+            document.getElementById('add-card-modal').classList.remove('hidden');
+        }
+
+        function renderMasterSelectList(cards) {
+            const listContainer = document.getElementById('master-select-list');
+            listContainer.innerHTML = '';
+
+            cards.forEach((card) => {
+                let colorClass = (card.suit === '紅桃' || card.suit === '方塊') ? 'text-red-400' : 'text-slate-300';
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700 hover:bg-slate-700/50 transition cursor-pointer";
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold ${colorClass}">${card.suit} ${card.num}</span>
+                        <span class="text-white font-medium">${card.name}</span>
+                        <span class="text-xs text-slate-400">(${card.type})</span>
+                    </div>
+                    <button class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1 rounded font-bold">加入手牌</button>
+                `;
+                item.onclick = () => addSpecificCardToHand(card);
+                listContainer.appendChild(item);
+            });
+        }
+
+        function filterCardList() {
+            const keyword = document.getElementById('card-search-input').value.toLowerCase();
+            const filtered = masterDeckData.filter(card => 
+                card.name.toLowerCase().includes(keyword) || 
+                card.suit.toLowerCase().includes(keyword) || 
+                card.type.toLowerCase().includes(keyword)
+            );
+            renderMasterSelectList(filtered);
+        }
+
+        function addSpecificCardToHand(card) {
+            let newHand = [...currentHand, card];
+            handRef.set(newHand);
+            closeModal('add-card-modal');
+        }
+
+        // 檢視牌堆頂/底
         function viewCards(position) {
             currentViewMode = position;
             const inputId = position === 'top' ? 'top-x-input' : 'bottom-x-input';
@@ -391,8 +515,8 @@
             }
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
         }
 
         function saveCardOrder() {
@@ -410,7 +534,7 @@
 
             deckRef.set(newDeck).then(() => {
                 alert("牌序已成功更新！");
-                closeModal();
+                closeModal('modal');
             }).catch(error => {
                 alert("更新失敗：" + error.message);
             });
@@ -418,3 +542,4 @@
     </script>
 </body>
 </html>
+        
