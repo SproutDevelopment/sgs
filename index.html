@@ -15,7 +15,7 @@
         <!-- 標題與狀態 -->
         <header class="text-center bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700">
             <h1 class="text-3xl font-bold text-amber-400 mb-2">三國殺共用牌堆系統</h1>
-            <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">連線中...</span></p>
+            <p class="text-slate-400">目前牌堆剩餘張數：<span id="pile-count" class="text-white font-bold text-xl">載入中...</span></p>
             <div id="error-msg" class="text-red-400 text-sm mt-2 font-bold"></div>
             <div class="mt-4 flex justify-center gap-4">
                 <button onclick="initOrResetDeck()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition">強制重洗整副牌 (161張)</button>
@@ -46,9 +46,7 @@
         <!-- 抽牌結果顯示區 -->
         <section id="result-container" class="bg-slate-800 p-6 rounded-xl border border-slate-700 text-center hidden">
             <h3 class="text-slate-400 text-sm mb-1">您剛剛抽到的卡牌：</h3>
-            <div id="drawn-card-display" class="inline-block p-4 rounded-lg bg-slate-900 border-2 border-amber-500 shadow-xl my-2">
-                <!-- 動態填入卡牌資訊 -->
-            </div>
+            <div id="drawn-card-display" class="inline-block p-4 rounded-lg bg-slate-900 border-2 border-amber-500 shadow-xl my-2"></div>
         </section>
 
         <!-- 彈窗：檢視與調整順序 -->
@@ -57,9 +55,7 @@
                 <h3 id="modal-title" class="text-xl font-bold text-amber-400 mb-4">調整牌序</h3>
                 <p class="text-xs text-slate-400 mb-2">提示：您可以點擊上下按鈕改變順序，最上方代表牌堆頂端。</p>
                 
-                <div id="modal-card-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2">
-                    <!-- 動態產生卡牌列表 -->
-                </div>
+                <div id="modal-card-list" class="space-y-2 overflow-y-auto flex-grow pr-2 my-2"></div>
 
                 <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-700">
                     <button onclick="closeModal()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded transition">取消</button>
@@ -81,7 +77,6 @@
             appId: "1:921066901941:web:4181a09c6a75e8389ac9fc"
         };
 
-        // 初始化 Firebase
         try {
             firebase.initializeApp(firebaseConfig);
         } catch (e) {
@@ -92,7 +87,7 @@
         const db = firebase.database();
         const deckRef = db.ref('sanguosha/deck');
 
-        // 完整 161 張牌資料庫定義
+        // 標準 161 張牌資料庫定義
         const masterDeckData = [
             // 黑桃 (39張)
             {suit: "黑桃", num: "A", name: "決鬥", type: "錦囊牌"},
@@ -263,7 +258,6 @@
         let currentDeck = [];
         let currentViewMode = '';
 
-        // 監聽資料庫
         deckRef.on('value', (snapshot) => {
             const data = snapshot.val();
             if (!data) {
@@ -275,7 +269,7 @@
             }
         }, (error) => {
             console.error(error);
-            document.getElementById('error-msg').innerText = "資料庫讀取失敗 (請檢查權限規則): " + error.message;
+            document.getElementById('error-msg').innerText = "資料庫讀取失敗: " + error.message;
         });
 
         function shuffle(array) {
@@ -292,7 +286,6 @@
             let shuffled = shuffle([...masterDeckData]);
             deckRef.set(shuffled).then(() => {
                 document.getElementById('result-container').classList.add('hidden');
-                console.log("牌堆已初始化！");
             }).catch(error => {
                 alert("重置失敗：" + error.message);
             });
@@ -309,11 +302,11 @@
                 }
                 window.lastDrawnCard = card;
                 return deck;
-            }, (error, committed, snapshot) => {
+            }, (error, committed) => {
                 if (committed && window.lastDrawnCard) {
                     displayDrawnCard(window.lastDrawnCard);
                 } else {
-                    alert("牌堆已經空了！請點擊「強制重洗整副牌」。");
+                    alert("牌堆已經空了！");
                 }
             });
         }
@@ -347,12 +340,7 @@
             }
 
             x = Math.min(x, currentDeck.length);
-            let targetCards = [];
-            if (position === 'top') {
-                targetCards = currentDeck.slice(0, x);
-            } else {
-                targetCards = currentDeck.slice(currentDeck.length - x);
-            }
+            let targetCards = (position === 'top') ? currentDeck.slice(0, x) : currentDeck.slice(currentDeck.length - x);
 
             renderModalList(targetCards, position);
             document.getElementById('modal').classList.remove('hidden');
@@ -414,7 +402,7 @@
             }
 
             deckRef.set(newDeck).then(() => {
-                alert("牌序已成功更新並同步給所有人！");
+                alert("牌序已成功更新！");
                 closeModal();
             }).catch(error => {
                 alert("更新失敗：" + error.message);
